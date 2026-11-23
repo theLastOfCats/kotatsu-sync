@@ -14,6 +14,8 @@ docker run -d --name kotatsu-sync --restart unless-stopped \
 curl -fsS http://127.0.0.1:8080/ # Alive
 ```
 
+GitHub Actions builds `linux/amd64` and `linux/arm64` images. On `master` it publishes `ghcr.io/thelastofcats/kotatsu-sync:latest` (also tagged `master`); a Git tag such as `v0.1.0` publishes the matching image tag. Each build also gets a `sha-<commit>` tag. To use a published image, replace `kotatsu-sync:0.1.0` in `docker run` with the registry image and tag.
+
 Put it behind an HTTPS reverse proxy. `BASE_URL` is the public origin used in password-reset links. Keep the signing secret and database volume across releases; back up SQLite with its online backup API (or `sqlite3 .backup`), not by copying just the main file while the server is running. An existing bind-mounted directory must be writable by container UID/GID `65532`.
 
 For a native build, use Rust 1.100 or newer, a C toolchain, and CMake: `cargo build --locked --release`. Native runs bind `127.0.0.1` by default; the container binds `0.0.0.0`. Set `PORT` to override `8080` and `DATABASE_PATH` to set the SQLite path. `DATABASE_DIALECT=mysql` uses `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, and `DATABASE_PASSWORD` instead.
