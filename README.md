@@ -31,7 +31,7 @@ The service is distributed under the [GNU GPL v3](LICENSE).
 
 ## Verify released artifacts
 
-[GitHub releases](https://github.com/theLastOfCats/kotatsu-sync/releases) include standalone GNU/Linux binaries (`kotatsu-sync-linux-amd64` and `kotatsu-sync-linux-arm64`) and `SHA256SUMS`. The binaries are extracted from the released images and dynamically linked against glibc. After downloading, run `chmod +x kotatsu-sync-linux-<arch>` to make the selected binary executable.
+[GitHub releases](https://github.com/theLastOfCats/kotatsu-sync/releases) include standalone GNU/Linux binaries (`kotatsu-sync-linux-amd64` and `kotatsu-sync-linux-arm64`) and `SHA256SUMS`. The binaries are extracted from the image digest linked in the release notes and dynamically linked against glibc. After downloading, make the binary executable (for example, `chmod +x kotatsu-sync-linux-amd64`).
 
 Verify release provenance with the GitHub CLI:
 
@@ -39,6 +39,6 @@ Verify release provenance with the GitHub CLI:
 gh attestation verify oci://ghcr.io/thelastofcats/kotatsu-sync:v1.0.0 \
   --repo theLastOfCats/kotatsu-sync --source-ref refs/tags/v1.0.0
 gh attestation verify ./kotatsu-sync-linux-amd64 \
-  --repo theLastOfCats/kotatsu-sync --source-ref refs/tags/v1.0.0
+  --repo theLastOfCats/kotatsu-sync --signer-workflow theLastOfCats/kotatsu-sync/.github/workflows/image.yml
 ```
 
