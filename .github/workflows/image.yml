@@ -125,7 +125,7 @@ jobs:
           container=
           trap 'if [[ -n "$container" ]]; then docker rm -f "$container" >/dev/null; fi' EXIT
           for arch in amd64 arm64; do
-            container=$(docker create --platform "linux/$arch" "$IMAGE@$DIGEST")
+            container=$(docker create --pull=always --platform "linux/$arch" "$IMAGE@$DIGEST")
             docker cp "$container:/usr/local/bin/kotatsu-sync" "$RUNNER_TEMP/release/kotatsu-sync-linux-$arch"
             docker rm "$container" >/dev/null
             container=

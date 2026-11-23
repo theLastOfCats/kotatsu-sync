@@ -5,16 +5,15 @@ Self-hosted sync for the Kotatsu Android reader: accounts, reading history, favo
 ## Run
 
 ```sh
-docker build -t kotatsu-sync:0.1.0 .
 printf 'JWT_SECRET=%s\nBASE_URL=https://sync.example.org\n' "$(openssl rand -hex 32)" > .env
 chmod 600 .env
 docker run -d --name kotatsu-sync --restart unless-stopped \
   --env-file .env -p 127.0.0.1:8080:8080 \
-  -v kotatsu-sync-data:/data kotatsu-sync:0.1.0
+  -v kotatsu-sync-data:/data ghcr.io/thelastofcats/kotatsu-sync:v1.0.0
 curl -fsS http://127.0.0.1:8080/ # Alive
 ```
 
-GitHub Actions builds `linux/amd64` and `linux/arm64` images. On `master` it publishes `ghcr.io/thelastofcats/kotatsu-sync:latest` (also tagged `master`); a Git tag such as `v0.1.0` publishes the matching image tag. Each build also gets a `sha-<commit>` tag. To use a published image, replace `kotatsu-sync:0.1.0` in `docker run` with the registry image and tag.
+GitHub Actions builds `linux/amd64` and `linux/arm64` images. On `master` it publishes `ghcr.io/thelastofcats/kotatsu-sync:latest` (also tagged `master`); a Git tag such as `v1.0.0` publishes the matching image tag. Published images also get a `sha-<commit>` tag and build provenance. To build locally instead, run `docker build -t kotatsu-sync:local .` and use that image in `docker run`.
 
 Put it behind an HTTPS reverse proxy. `BASE_URL` is the public origin used in password-reset links. Keep the signing secret and database volume across releases; back up SQLite with its online backup API (or `sqlite3 .backup`), not by copying just the main file while the server is running. An existing bind-mounted directory must be writable by container UID/GID `65532`.
 
@@ -29,3 +28,17 @@ Set `MAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, and, for authen
 The original Go server and Kotatsu Sync use different database layouts. For a fresh replacement, use a new database path and keep the Go database untouched. Go-issued session tokens aren't accepted; sign in again after switching servers.
 
 The service is distributed under the [GNU GPL v3](LICENSE).
+
+## Verify released artifacts
+
+[GitHub releases](https://github.com/theLastOfCats/kotatsu-sync/releases) include standalone GNU/Linux binaries (`kotatsu-sync-linux-amd64` and `kotatsu-sync-linux-arm64`) and `SHA256SUMS`. The binaries are extracted from the released images and dynamically linked against glibc. After downloading, run `chmod +x kotatsu-sync-linux-<arch>` to make the selected binary executable.
+
+Verify release provenance with the GitHub CLI:
+
+```sh
+gh attestation verify oci://ghcr.io/thelastofcats/kotatsu-sync:v1.0.0 \
+  --repo theLastOfCats/kotatsu-sync --source-ref refs/tags/v1.0.0
+gh attestation verify ./kotatsu-sync-linux-amd64 \
+  --repo theLastOfCats/kotatsu-sync --source-ref refs/tags/v1.0.0
+```
+
