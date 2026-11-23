@@ -65,7 +65,12 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     permissions:
+      contents: read
+      id-token: write
+      attestations: write
       packages: write
+    outputs:
+      digest: ${{ steps.manifest.outputs.digest }}
     steps:
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -73,6 +78,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish manifest
+        id: manifest
         env:
           AMD64: ${{ needs.build.outputs.amd64 }}
           ARM64: ${{ needs.build.outputs.arm64 }}
@@ -82,4 +88,62 @@ jobs:
           if [[ "$GITHUB_REF" == refs/heads/master ]]; then
             tags+=(--tag "$IMAGE:latest")
           fi
-          docker buildx imagetools create "${tags[@]}" "$IMAGE@$AMD64" "$IMAGE@$ARM64"
+          metadata=$(mktemp)
+          trap 'rm -f "$metadata"' EXIT
+          docker buildx imagetools create --metadata-file "$metadata" "${tags[@]}" "$IMAGE@$AMD64" "$IMAGE@$ARM64"
+          digest=$(jq -er '."containerimage.descriptor".digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "$metadata")
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest image index
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+
+  release:
+    name: Publish release binaries
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract binaries from image index
+        env:
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          : "${DIGEST:?missing image index digest}"
+          mkdir -p "$RUNNER_TEMP/release"
+          container=
+          trap 'if [[ -n "$container" ]]; then docker rm -f "$container" >/dev/null; fi' EXIT
+          for arch in amd64 arm64; do
+            container=$(docker create --platform "linux/$arch" "$IMAGE@$DIGEST")
+            docker cp "$container:/usr/local/bin/kotatsu-sync" "$RUNNER_TEMP/release/kotatsu-sync-linux-$arch"
+            docker rm "$container" >/dev/null
+            container=
+            test -s "$RUNNER_TEMP/release/kotatsu-sync-linux-$arch"
+          done
+          cd "$RUNNER_TEMP/release"
+          sha256sum kotatsu-sync-linux-amd64 kotatsu-sync-linux-arm64 > SHA256SUMS
+      - name: Attest release binaries
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release/kotatsu-sync-linux-*
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
+            "$RUNNER_TEMP/release/kotatsu-sync-linux-amd64" \
+            "$RUNNER_TEMP/release/kotatsu-sync-linux-arm64" \
+            "$RUNNER_TEMP/release/SHA256SUMS"
